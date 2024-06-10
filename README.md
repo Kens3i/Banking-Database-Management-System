@@ -393,109 +393,111 @@ Facilitates transferring funds between accounts while managing loan adjustments 
 ```sql
 -- Procedure to Transfer Funds Between Accounts
 CREATE PROCEDURE TransferFunds
-	@FromAccountID INT,
-	@ToAccountID INT,
-	@Amount DECIMAL(18, 2),
-	@TransactionDate DATE
+    @FromAccountID INT,
+    @ToAccountID INT,
+    @Amount DECIMAL(18, 2),
+    @TransactionDate DATE
 AS
 BEGIN
-	DECLARE @FromBalance DECIMAL(18, 2);
-	DECLARE @ToBalance DECIMAL(18, 2);
-	DECLARE @CustomerID INT;
-	DECLARE @NewLoanAmount DECIMAL(18, 2);
+    DECLARE @FromBalance DECIMAL(18, 2);
+    DECLARE @ToBalance DECIMAL(18, 2);
+    DECLARE @CustomerID INT;
+    DECLARE @NewLoanAmount DECIMAL(18, 2);
+    DECLARE @ToCustomerID INT;
+    DECLARE @ToLoanID INT;
+    DECLARE @ToLoanAmount DECIMAL(18, 2);
+    DECLARE @Interest DECIMAL(18, 2);
+    DECLARE @TotalDue DECIMAL(18, 2);
 
-	-- Get the balance of the from account
-	SELECT @FromBalance = Balance FROM Accounts WHERE AccountID = @FromAccountID;
+    -- Get the balance of the from account
+    SELECT @FromBalance = Balance FROM Accounts WHERE AccountID = @FromAccountID;
 
-	-- Get the balance of the to account
-	SELECT @ToBalance = Balance FROM Accounts WHERE AccountID = @ToAccountID;
+    -- Get the balance of the to account
+    SELECT @ToBalance = Balance FROM Accounts WHERE AccountID = @ToAccountID;
 
-	-- Check if the from account has sufficient funds
-	IF @FromBalance < @Amount
-	BEGIN
-    	-- Calculate the new loan amount
-    	SET @NewLoanAmount = @Amount - @FromBalance;
+    -- Check if the from account has sufficient funds
+    IF @FromBalance < @Amount
+    BEGIN
+        -- Calculate the new loan amount
+        SET @NewLoanAmount = @Amount - @FromBalance;
 
-    	-- Get the CustomerID of the from account
-    	SELECT @CustomerID = CustomerID FROM Accounts WHERE AccountID = @FromAccountID;
+        -- Get the CustomerID of the from account
+        SELECT @CustomerID = CustomerID FROM Accounts WHERE AccountID = @FromAccountID;
 
-    	-- Check if the customer already has a loan
-    	IF EXISTS (SELECT 1 FROM Loans WHERE CustomerID = @CustomerID)
-    	BEGIN
-        	-- Update existing loan and set new start date
-        	UPDATE Loans
-        	SET LoanAmount = LoanAmount + @NewLoanAmount,
-            	StartDate = @TransactionDate
-        	WHERE CustomerID = @CustomerID;
-    	END
-    	ELSE
-    	BEGIN
-        	-- Create a new loan
-        	INSERT INTO Loans (CustomerID, LoanAmount, InterestRate, StartDate, EndDate)
-        	VALUES (@CustomerID, @NewLoanAmount, 5.0, @TransactionDate, DATEADD(YEAR, 1, @TransactionDate));
-    	END
+        -- Check if the customer already has a loan
+        IF EXISTS (SELECT 1 FROM Loans WHERE CustomerID = @CustomerID)
+        BEGIN
+            -- Update existing loan and set new start date
+            UPDATE Loans
+            SET LoanAmount = LoanAmount + @NewLoanAmount,
+                StartDate = @TransactionDate
+            WHERE CustomerID = @CustomerID;
+        END
+        ELSE
+        BEGIN
+            -- Create a new loan
+            INSERT INTO Loans (CustomerID, LoanAmount, InterestRate, StartDate, EndDate)
+            VALUES (@CustomerID, @NewLoanAmount, 5.0, @TransactionDate, DATEADD(YEAR, 1, @TransactionDate));
+        END
 
-    	-- Update the from account balance to zero
-    	UPDATE Accounts
-    	SET Balance = 0
-    	WHERE AccountID = @FromAccountID;
+        -- Update the from account balance to zero
+        UPDATE Accounts
+        SET Balance = 0
+        WHERE AccountID = @FromAccountID;
 
-    	-- Update the to account balance
-    	UPDATE Accounts
-    	SET Balance = Balance + @Amount
-    	WHERE AccountID = @ToAccountID;
-	END
-	ELSE
-	BEGIN
-    	-- Update the from account balance
-    	UPDATE Accounts
-    	SET Balance = Balance - @Amount
-    	WHERE AccountID = @FromAccountID;
+        -- Update the to account balance
+        UPDATE Accounts
+        SET Balance = Balance + @Amount
+        WHERE AccountID = @ToAccountID;
+    END
+    ELSE
+    BEGIN
+        -- Update the from account balance
+        UPDATE Accounts
+        SET Balance = Balance - @Amount
+        WHERE AccountID = @FromAccountID;
 
-    	-- Update the to account balance
-    	UPDATE Accounts
-    	SET Balance = Balance + @Amount
-    	WHERE AccountID = @ToAccountID;
-	END
+        -- Update the to account balance
+        UPDATE Accounts
+        SET Balance = Balance + @Amount
+        WHERE AccountID = @ToAccountID;
+    END
 
-	-- Insert transactions for both accounts
-	INSERT INTO Transactions (AccountID, TransactionType, Amount, TransactionDate, Description)
-	VALUES (@FromAccountID, 'Transfer Out', @Amount, @TransactionDate, 'Transfer to another account');
+    -- Insert transactions for both accounts
+    INSERT INTO Transactions (AccountID, TransactionType, Amount, TransactionDate, Description)
+    VALUES (@FromAccountID, 'Transfer Out', @Amount, @TransactionDate, 'Transfer to another account');
 
-	INSERT INTO Transactions (AccountID, TransactionType, Amount, TransactionDate, Description)
-	VALUES (@ToAccountID, 'Transfer In', @Amount, @TransactionDate, 'Transfer from another account');
+    INSERT INTO Transactions (AccountID, TransactionType, Amount, TransactionDate, Description)
+    VALUES (@ToAccountID, 'Transfer In', @Amount, @TransactionDate, 'Transfer from another account');
 
-	-- Check if the transferred amount to Alice repays the loan
-	IF @ToAccountID = 1 -- Assuming Alice's AccountID is 1
-	BEGIN
-    	DECLARE @AliceCustomerID INT;
-    	DECLARE @AliceLoanAmount DECIMAL(18, 2);
-    	DECLARE @Interest DECIMAL(18, 2);
-    	DECLARE @TotalDue DECIMAL(18, 2);
+    -- Check if the recipient account has an outstanding loan
+    SELECT @ToCustomerID = CustomerID FROM Accounts WHERE AccountID = @ToAccountID;
 
-    	-- Get Alice's CustomerID and current loan details
-    	SELECT @AliceCustomerID = CustomerID FROM Accounts WHERE AccountID = @ToAccountID;
-    	SELECT @AliceLoanAmount = LoanAmount FROM Loans WHERE CustomerID = @AliceCustomerID;
+    IF EXISTS (SELECT 1 FROM Loans WHERE CustomerID = @ToCustomerID)
+    BEGIN
+        -- Get the recipient's loan details
+        SELECT @ToLoanID = LoanID, @ToLoanAmount = LoanAmount FROM Loans WHERE CustomerID = @ToCustomerID;
 
-    	-- Calculate interest up to the transfer date
-    	SET @Interest = dbo.CalculateLoanInterest(1, @TransactionDate); -- Assuming Alice's LoanID is 1
-    	SET @TotalDue = @AliceLoanAmount + @Interest;
+        -- Calculate interest up to the transfer date
+        SET @Interest = dbo.CalculateLoanInterest(@ToLoanID, @TransactionDate);
+        SET @TotalDue = @ToLoanAmount + @Interest;
 
-    	IF @Amount >= @TotalDue
-    	BEGIN
-        	-- Fully repay the loan including interest
-        	UPDATE Loans
-        	SET LoanAmount = 0
-        	WHERE CustomerID = @AliceCustomerID;
-    	END
-    	ELSE
-    	BEGIN
-        	-- Partially repay the loan and the interest
-        	UPDATE Loans
-        	SET LoanAmount = @TotalDue - @Amount
-        	WHERE CustomerID = @AliceCustomerID;
-    	END
-	END
+        IF @Amount >= @TotalDue
+        BEGIN
+            -- Fully repay the loan including interest
+            UPDATE Loans
+            SET LoanAmount = 0
+            WHERE CustomerID = @ToCustomerID;
+        END
+        ELSE
+        BEGIN
+            -- Partially repay the loan and the interest
+            UPDATE Loans
+            SET LoanAmount = @TotalDue - @Amount
+            WHERE CustomerID = @ToCustomerID;
+        END
+    END
+END;
 ```
 ### Step 7: Implementing Triggers
 **Trigger to Log Account Balance Changes**
