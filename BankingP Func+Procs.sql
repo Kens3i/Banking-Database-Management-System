@@ -215,6 +215,7 @@ BEGIN
     DECLARE @ToLoanAmount DECIMAL(18, 2);
     DECLARE @Interest DECIMAL(18, 2);
     DECLARE @TotalDue DECIMAL(18, 2);
+    DECLARE @RemainingAmount DECIMAL(18, 2);
 
     -- Get the balance of the from account
     SELECT @FromBalance = Balance FROM Accounts WHERE AccountID = @FromAccountID;
@@ -252,10 +253,8 @@ BEGIN
         SET Balance = 0
         WHERE AccountID = @FromAccountID;
 
-        -- Update the to account balance
-        UPDATE Accounts
-        SET Balance = Balance + @Amount
-        WHERE AccountID = @ToAccountID;
+        -- Set remaining amount to the full transfer amount since we are creating a loan for the shortfall
+        SET @RemainingAmount = @Amount;
     END
     ELSE
     BEGIN
@@ -264,10 +263,8 @@ BEGIN
         SET Balance = Balance - @Amount
         WHERE AccountID = @FromAccountID;
 
-        -- Update the to account balance
-        UPDATE Accounts
-        SET Balance = Balance + @Amount
-        WHERE AccountID = @ToAccountID;
+        -- Set remaining amount to the transfer amount
+        SET @RemainingAmount = @Amount;
     END
 
     -- Insert transactions for both accounts
@@ -289,23 +286,40 @@ BEGIN
         SET @Interest = dbo.CalculateLoanInterest(@ToLoanID, @TransactionDate);
         SET @TotalDue = @ToLoanAmount + @Interest;
 
-        IF @Amount >= @TotalDue
+        IF @RemainingAmount >= @TotalDue
         BEGIN
             -- Fully repay the loan including interest
             UPDATE Loans
             SET LoanAmount = 0
             WHERE CustomerID = @ToCustomerID;
+
+            -- Update the to account balance with the remaining amount after loan repayment
+            SET @RemainingAmount = @RemainingAmount - @TotalDue;
+            UPDATE Accounts
+            SET Balance = Balance + @RemainingAmount
+            WHERE AccountID = @ToAccountID;
         END
         ELSE
         BEGIN
             -- Partially repay the loan and the interest
             UPDATE Loans
-            SET LoanAmount = @TotalDue - @Amount
+            SET LoanAmount = @TotalDue - @RemainingAmount
             WHERE CustomerID = @ToCustomerID;
+
+            -- Since the transfer amount was less than the total due, no remaining amount is added to the balance
+            UPDATE Accounts
+            SET Balance = Balance
+            WHERE AccountID = @ToAccountID;
         END
     END
+    ELSE
+    BEGIN
+        -- No loan to repay, so just update the to account balance with the transfer amount
+        UPDATE Accounts
+        SET Balance = Balance + @RemainingAmount
+        WHERE AccountID = @ToAccountID;
+    END
 END;
-
 
 
 
