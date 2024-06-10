@@ -199,7 +199,6 @@ JOIN
 
 
 -- Procedure to Transfer Funds Between Accounts
-
 CREATE PROCEDURE TransferFunds
     @FromAccountID INT,
     @ToAccountID INT,
@@ -211,6 +210,11 @@ BEGIN
     DECLARE @ToBalance DECIMAL(18, 2);
     DECLARE @CustomerID INT;
     DECLARE @NewLoanAmount DECIMAL(18, 2);
+    DECLARE @ToCustomerID INT;
+    DECLARE @ToLoanID INT;
+    DECLARE @ToLoanAmount DECIMAL(18, 2);
+    DECLARE @Interest DECIMAL(18, 2);
+    DECLARE @TotalDue DECIMAL(18, 2);
 
     -- Get the balance of the from account
     SELECT @FromBalance = Balance FROM Accounts WHERE AccountID = @FromAccountID;
@@ -273,35 +277,31 @@ BEGIN
     INSERT INTO Transactions (AccountID, TransactionType, Amount, TransactionDate, Description)
     VALUES (@ToAccountID, 'Transfer In', @Amount, @TransactionDate, 'Transfer from another account');
 
-    -- Check if the transferred amount to Alice repays the loan
-    IF @ToAccountID = 1 -- Assuming Alice's AccountID is 1
-    BEGIN
-        DECLARE @AliceCustomerID INT;
-        DECLARE @AliceLoanAmount DECIMAL(18, 2);
-        DECLARE @Interest DECIMAL(18, 2);
-        DECLARE @TotalDue DECIMAL(18, 2);
+    -- Check if the recipient account has an outstanding loan
+    SELECT @ToCustomerID = CustomerID FROM Accounts WHERE AccountID = @ToAccountID;
 
-        -- Get Alice's CustomerID and current loan details
-        SELECT @AliceCustomerID = CustomerID FROM Accounts WHERE AccountID = @ToAccountID;
-        SELECT @AliceLoanAmount = LoanAmount FROM Loans WHERE CustomerID = @AliceCustomerID;
+    IF EXISTS (SELECT 1 FROM Loans WHERE CustomerID = @ToCustomerID)
+    BEGIN
+        -- Get the recipient's loan details
+        SELECT @ToLoanID = LoanID, @ToLoanAmount = LoanAmount FROM Loans WHERE CustomerID = @ToCustomerID;
 
         -- Calculate interest up to the transfer date
-        SET @Interest = dbo.CalculateLoanInterest(1, @TransactionDate); -- Assuming Alice's LoanID is 1
-        SET @TotalDue = @AliceLoanAmount + @Interest;
+        SET @Interest = dbo.CalculateLoanInterest(@ToLoanID, @TransactionDate);
+        SET @TotalDue = @ToLoanAmount + @Interest;
 
         IF @Amount >= @TotalDue
         BEGIN
             -- Fully repay the loan including interest
             UPDATE Loans
             SET LoanAmount = 0
-            WHERE CustomerID = @AliceCustomerID;
+            WHERE CustomerID = @ToCustomerID;
         END
         ELSE
         BEGIN
             -- Partially repay the loan and the interest
             UPDATE Loans
             SET LoanAmount = @TotalDue - @Amount
-            WHERE CustomerID = @AliceCustomerID;
+            WHERE CustomerID = @ToCustomerID;
         END
     END
 END;
