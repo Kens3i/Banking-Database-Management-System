@@ -1,7 +1,7 @@
 #  Banking Database Management System 💳
 ## Powered by MS SQL Server and T-SQL
 
-![](https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExb2sybnZteXBpZHNvNGhhNmd3NWt0ZG5sYjlrZWNwajdsa3F4dXk1aiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Mzzes97FZRgbq4JhZW/giphy.webp)
+![](https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExa3JuZnF6bzVzeGVnODg1ZHhtc3Z1Znc3ZXZqb21uaDhsZXMxaTBtZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Y4Gn0In0uDKeckKW0J/giphy.gif)
 
 ## Table of Contents
 
