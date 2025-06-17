@@ -23,6 +23,9 @@ This project demonstrates a comprehensive approach to designing and implementing
 - Transaction and trigger implementation
 - Security considerations
 
+![](https://github.com/Kens3i/Banking-Database-Management-System/blob/main/SS/Banking%20DB.png?raw=true)
+_Schema Diagram._
+
 ## Motivation
 
 The primary motivation behind this project is to create a robust and scalable database system for managing banking operations. The system aims to:
