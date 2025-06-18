@@ -540,6 +540,10 @@ BEGIN
         deleted d ON i.AccountID = d.AccountID;
 END;
 ```
+- deleted holds the pre-update snapshot of each row.
+- inserted holds the post-update snapshot.
+- Joining them lets us capture “OldBalance” vs. “NewBalance” for each updated account row, and then we log that difference.
+
 
 **Trigger to Automatically Create an Account When a New Customer is Added**
 Automates the process of account creation whenever a new customer is added to the Customers table. This ensures that every new customer automatically receives a default account without requiring additional manual steps.
